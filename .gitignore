@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+voices/
+npc_reactions/
+*.wav
+*.mp3
+*.flac
+*.m4a
+mac_smoke_results.json
+.artifacts/

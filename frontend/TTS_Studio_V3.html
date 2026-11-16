@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Engine · TTS Studio V3 — Multi-Engine TTS Benchmark</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: #111827;
+      --panel-alt: #182235;
+      --border: #26334d;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.25);
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --purple: #a855f7;
+    }
+
+    * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top right, #131c31 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 22px 16px 48px;
+    }
+
+    .container { max-width: 1220px; margin: 0 auto; }
+
+    /* Header & Server Status */
+    header {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+
+    .brand h1 {
+      margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand p { margin: 4px 0 0; color: var(--muted); font-size: 0.88rem; }
+
+    .server-bar {
+      display: flex; align-items: center; gap: 10px; background: var(--panel);
+      padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--amber);
+      box-shadow: 0 0 8px var(--amber); transition: all 0.3s ease;
+    }
+    .status-dot.online {
+      background: var(--green); box-shadow: 0 0 10px var(--green);
+      animation: pulseDot 2s infinite;
+    }
+    .status-dot.offline { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.7; }
+    }
+
+    .server-bar input {
+      background: #0b1120; border: 1px solid var(--border); color: var(--text);
+      padding: 6px 10px; border-radius: 6px; font-size: 0.88rem; width: 195px;
+    }
+    .btn-sm {
+      background: var(--panel-alt); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 11px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Main Layout Grid */
+    .workspace {
+      display: grid; grid-template-columns: 372px 1fr; gap: 20px; align-items: start;
+    }
+    @media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px; box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    }
+
+    .section-title {
+      font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted); font-weight: 700; margin: 0 0 12px; display: flex;
+      justify-content: space-between; align-items: center;
+    }
+
+    /* Left Panel: 30 NPC Profiles */
+    .filter-tabs {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px;
+    }
+    .tab-btn {
+      background: #0b1120; border: 1px solid var(--border); color: var(--muted);
+      padding: 6px 4px; border-radius: 7px; font-size: 0.76rem; font-weight: 600;
+      cursor: pointer; transition: all 0.18s ease; text-align: center;
+    }
+    .tab-btn.active {
+      background: rgba(56, 189, 248, 0.14); border-color: var(--accent); color: var(--accent);
+    }
+
+    .search-box {
+      width: 100%; background: #0b1120; border: 1px solid var(--border); color: var(--text);
+      padding: 8px 10px; border-radius: 8px; font-size: 0.86rem; margin-bottom: 10px;
+    }
+
+    .npc-list {
+      max-height: 580px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px;
+      padding-right: 4px;
+    }
+    .npc-list::-webkit-scrollbar { width: 6px; }
+    .npc-list::-webkit-scrollbar-thumb { background: #26334d; border-radius: 4px; }
+
+    /* Plain block flow on purpose — NOT display:flex. Chromium/WebKit collapse
+       a -webkit-line-clamp descendant to zero height when the layout up the
+       tree is flex, which is what was actually causing the roster to look
+       squished (names and descriptions were there, just clipped to ~0px). */
+    .npc-item {
+      background: #0d1424; border: 1px solid var(--border); border-radius: 10px;
+      padding: 11px 12px 11px 16px; cursor: pointer; transition: all 0.18s ease;
+      position: relative;
+    }
+    .npc-item::before {
+      /* Gender accent bar, drawn as a pseudo-element instead of a flex sibling
+         so it can never affect the text layout next to it. */
+      content: ""; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 3px;
+      border-radius: 3px; background: var(--border);
+    }
+    .npc-item[data-gender="female"]::before { background: #f472b6; }
+    .npc-item[data-gender="male"]::before { background: #60a5fa; }
+    .npc-item:hover {
+      border-color: #475569; transform: translateX(3px); background: #131d33;
+    }
+    .npc-item.selected {
+      border-color: var(--accent); background: linear-gradient(90deg, rgba(56,189,248,0.14), rgba(15,23,42,0.6));
+      box-shadow: 0 0 15px rgba(56,189,248,0.12);
+    }
+    .npc-name {
+      font-weight: 700; font-size: 0.95rem; color: var(--text); line-height: 1.3;
+      white-space: normal; word-break: normal; overflow-wrap: anywhere;
+    }
+    .npc-desc {
+      font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: 4px;
+      display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .npc-tags { display: flex; gap: 4px; margin-top: 5px; }
+    .badge {
+      font-size: 0.66rem; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+      text-transform: uppercase; letter-spacing: 0.02em; flex-shrink: 0;
+    }
+    .badge.fem { background: rgba(236, 72, 153, 0.18); color: #f472b6; }
+    .badge.male { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
+    .badge.anime { background: rgba(168, 85, 247, 0.22); color: #c084fc; }
+
+    /* Right Panel: Controls, Visualizer & Benchmarks */
+    .right-col { display: flex; flex-direction: column; gap: 16px; }
+
+    .top-controls {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    @media (max-width: 680px) { .top-controls { grid-template-columns: 1fr; } }
+
+    .segmented {
+      display: grid; grid-template-columns: 1fr 1fr; background: #0b1120;
+      padding: 4px; border-radius: 9px; border: 1px solid var(--border);
+    }
+    .seg-btn {
+      padding: 8px; border: none; background: transparent; color: var(--muted);
+      font-weight: 700; font-size: 0.84rem; border-radius: 6px; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .seg-btn.active { background: var(--accent); color: #051626; box-shadow: 0 2px 10px var(--accent-glow); }
+
+    .engine-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .eng-card {
+      background: #0b1120; border: 1px solid var(--border); border-radius: 9px;
+      padding: 9px 10px; cursor: pointer; transition: all 0.18s ease; text-align: left;
+    }
+    .eng-card:hover { border-color: #475569; }
+    .eng-card.active {
+      border-color: var(--green); background: rgba(16, 185, 129, 0.12);
+      box-shadow: 0 0 12px var(--green-glow);
+    }
+    .eng-title { font-weight: 700; font-size: 0.85rem; color: var(--text); display: block; }
+    .eng-sub { font-size: 0.72rem; color: var(--muted); display: block; margin-top: 2px; }
+
+    /* Mood Presets */
+    .mood-bar {
+      display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px;
+    }
+    .mood-btn {
+      background: #0b1120; border: 1px solid var(--border); color: var(--text);
+      padding: 6px 11px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; transition: all 0.18s ease;
+    }
+    .mood-btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+    .mood-btn.active { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+    /* Modifiers Grid */
+    .modifiers-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      background: #0b1120; padding: 14px; border-radius: 10px; border: 1px solid var(--border);
+    }
+    @media (max-width: 760px) { .modifiers-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .mod-item label {
+      display: flex; justify-content: space-between; font-size: 0.78rem;
+      font-weight: 600; color: #cbd5e1; margin-bottom: 5px;
+    }
+    .mod-item label span { color: var(--accent); font-family: monospace; }
+    .mod-item input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .mod-item select, .mod-item input[type="text"] {
+      width: 100%; background: var(--panel); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 8px; border-radius: 6px; font-size: 0.82rem;
+    }
+
+    /* Script Editor & Live Stats */
+    .editor-wrap { position: relative; }
+    textarea {
+      width: 100%; min-height: 118px; background: #0b1120; border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); padding: 12px; font-size: 0.96rem;
+      line-height: 1.5; resize: vertical; transition: border-color 0.2s;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+
+    .editor-meta {
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+      gap: 8px; margin-top: 8px; font-size: 0.78rem; color: var(--muted);
+    }
+    .meta-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill {
+      background: #0b1120; border: 1px solid var(--border); padding: 3px 8px;
+      border-radius: 6px; font-family: monospace; color: #cbd5e1;
+    }
+
+    .tag-row {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center;
+    }
+    .tag-row span { font-size: 0.75rem; color: var(--muted); margin-right: 4px; }
+    .tag-btn {
+      background: var(--panel-alt); border: 1px solid var(--border); color: #e2e8f0;
+      padding: 4px 9px; border-radius: 6px; font-size: 0.78rem; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tag-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+
+    /* Action Bar & Animated Audio Waveform */
+    .action-row {
+      display: flex; gap: 10px; align-items: center; margin-top: 14px;
+    }
+    .btn-generate {
+      flex: 1; padding: 13px 18px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #10b981, #059669); color: #032219;
+      font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      box-shadow: 0 4px 18px var(--green-glow);
+    }
+    .btn-generate:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+    .btn-generate:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
+
+    .action-row-sub { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+    .btn-stop {
+      padding: 13px 18px; border: none; border-radius: 10px; background: var(--red);
+      color: #fff; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-stop:hover { opacity: 0.9; }
+
+    .btn-dl {
+      padding: 13px 16px; border-radius: 10px; background: var(--panel-alt);
+      border: 1px solid var(--border); color: var(--accent); font-weight: 700;
+      text-decoration: none; font-size: 0.9rem; display: none; align-items: center;
+    }
+    .btn-dl.visible { display: inline-flex; }
+
+    /* Live Animated Equalizer + Telemetry Cards */
+    .telemetry-box {
+      background: #0b1120; border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; margin-top: 14px;
+    }
+    .vis-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+    }
+    .status-text { font-size: 0.88rem; font-weight: 600; color: var(--accent); }
+
+    .equalizer {
+      display: flex; align-items: flex-end; gap: 3px; height: 22px;
+    }
+    .eq-bar {
+      width: 4px; height: 4px; background: var(--accent); border-radius: 2px;
+      transition: height 0.1s ease;
+    }
+    .equalizer.active .eq-bar {
+      animation: eqBounce 0.55s ease-in-out infinite alternate;
+    }
+    .equalizer.active .eq-bar:nth-child(2) { animation-delay: 0.1s; background: var(--green); }
+    .equalizer.active .eq-bar:nth-child(3) { animation-delay: 0.25s; }
+    .equalizer.active .eq-bar:nth-child(4) { animation-delay: 0.15s; background: var(--purple); }
+    .equalizer.active .eq-bar:nth-child(5) { animation-delay: 0.3s; }
+    .equalizer.active .eq-bar:nth-child(6) { animation-delay: 0.05s; background: var(--green); }
+    .equalizer.active .eq-bar:nth-child(7) { animation-delay: 0.2s; }
+
+    @keyframes eqBounce {
+      0% { height: 4px; }
+      100% { height: 22px; }
+    }
+
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    }
+    @media (max-width: 680px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .metric-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px; text-align: center;
+    }
+    .metric-val {
+      font-size: 1.25rem; font-weight: 800; font-family: monospace; color: var(--text);
+    }
+    .metric-val.fast { color: var(--green); }
+    .metric-val.med { color: var(--amber); }
+    .metric-val.slow { color: var(--red); }
+    .metric-lbl { font-size: 0.72rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; }
+
+    /* Per-engine rollup — answers "which model is actually fastest" at a glance */
+    .engine-summary {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;
+    }
+    @media (max-width: 680px) { .engine-summary { grid-template-columns: 1fr; } }
+    .engine-summary-card {
+      background: #0b1120; border: 1px solid var(--border); border-radius: 9px;
+      padding: 9px 12px;
+    }
+    .engine-summary-card.best { border-color: var(--green); box-shadow: 0 0 10px var(--green-glow); }
+    .es-title { font-size: 0.78rem; font-weight: 700; color: var(--text); display: flex; justify-content: space-between; }
+    .es-title .es-crown { color: var(--green); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+    .es-stats { display: flex; gap: 12px; margin-top: 5px; font-size: 0.74rem; color: var(--muted); }
+    .es-stats b { color: var(--text); font-family: monospace; font-weight: 700; }
+    .engine-summary-empty { color: var(--muted); font-size: 0.8rem; padding: 2px 2px 10px; }
+
+    /* Benchmark Comparison History Table */
+    .bench-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;
+    }
+    th {
+      color: var(--muted); font-weight: 700; padding: 8px 10px;
+      border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 0.72rem;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    th:hover { color: var(--accent); }
+    th.sorted::after { content: " \2193"; color: var(--accent); }
+    th.sorted.asc::after { content: " \2191"; color: var(--accent); }
+    td { padding: 8px 10px; border-bottom: 1px solid rgba(38, 51, 77, 0.5); }
+    tr { animation: fadeInRow 0.3s ease; }
+    @keyframes fadeInRow {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>Hermes Engine · TTS Studio V3</h1>
+        <p>Live Game Dialogue Benchmark &bull; 30 Custom Profiles (70% Female / 30% Male + Japanese Anime)</p>
+      </div>
+      <div class="server-bar">
+        <div class="status-dot" id="statusDot" title="Server Status"></div>
+        <input type="text" id="serverUrl" />
+        <button class="btn-sm" id="pingBtn">Check Server</button>
+      </div>
+    </header>
+
+    <details class="card" style="margin-bottom:16px" id="configDrawer"><summary>API &amp; Model Configuration · V3</summary><div class="modifiers-grid" style="margin-top:12px">
+      <div class="mod-item"><label>Qwen model ID</label><input id="model-qwen" type="text" value="mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"></div>
+      <div class="mod-item"><label>Chatterbox model ID</label><input id="model-chatterbox" type="text" value="mlx-community/chatterbox-turbo-4bit"></div>
+      <div class="mod-item"><label>Kokoro model ID</label><input id="model-kokoro" type="text" value="mlx-community/Kokoro-82M-bf16"></div>
+      <div class="mod-item"><label>Native interval (s)</label><input id="interval" type="number" min="0.1" max="5" step="0.1" value="0.5"></div>
+      <div class="mod-item"><label>Server URL</label><input id="drawerUrl" type="text" value="http://10.0.0.129:8000"></div>
+      <div class="mod-item"><label>Voice coverage</label><button class="btn-sm" id="coverageBtn">Check all 30 mappings</button></div>
+    </div><p id="coverage" style="white-space:pre-wrap;color:var(--muted)">Model overrides apply per request. Use compatible checkpoints only.</p></details>
+    <div class="workspace">
+      <!-- LEFT COLUMN: 30 NPC ROSTER -->
+      <aside class="card">
+        <div class="section-title">
+          <span>30 NPC Roster</span>
+          <span id="rosterCount">30 Profiles</span>
+        </div>
+
+        <div class="filter-tabs">
+          <button class="tab-btn active" data-filter="all">All (<span data-count="all">30</span>)</button>
+          <button class="tab-btn" data-filter="female">Fem (<span data-count="female">21</span>)</button>
+          <button class="tab-btn" data-filter="male">Male (<span data-count="male">9</span>)</button>
+          <button class="tab-btn" data-filter="anime">Anime (<span data-count="anime">7</span>)</button>
+        </div>
+
+        <input type="text" class="search-box" id="npcSearch" placeholder="Search merchant, blacksmith, anime..." />
+        <div class="npc-list" id="npcList"></div>
+      </aside>
+
+      <!-- RIGHT COLUMN: ENGINE, MODIFIERS, EDITOR & BENCHMARK -->
+      <main class="right-col">
+        <div class="card">
+          <div class="top-controls">
+            <div>
+              <div class="section-title">1. Delivery Mode</div>
+              <div class="segmented">
+                <button class="seg-btn active" data-mode="stream">Live Stream (/stream)</button>
+                <button class="seg-btn" data-mode="full">Full WAV (/speech)</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="section-title">2. Active Mac MLX Model</div>
+              <div class="engine-grid">
+                <button class="eng-card active" data-engine="chatterbox">
+                  <span class="eng-title">Chatterbox Turbo</span>
+                  <span class="eng-sub">Voice Clone + Tags</span>
+                </button>
+                <button class="eng-card" data-engine="qwen">
+                  <span class="eng-title">Qwen3-TTS 0.6B</span>
+                  <span class="eng-sub">Instruct Emotion</span>
+                </button>
+                <button class="eng-card" data-engine="kokoro">
+                  <span class="eng-title">Kokoro-82M</span>
+                  <span class="eng-sub">Ultra-Fast Neutral</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <div class="section-title">3. Haggling &amp; Barter Mood Presets (Auto-Tunes Modifiers)</div>
+            <div class="mood-bar">
+              <button class="mood-btn" data-mood="neutral">Neutral Trade</button>
+              <button class="mood-btn" data-mood="happy">Happy / Good Deal</button>
+              <button class="mood-btn" data-mood="suspicious">Suspicious / Guarded</button>
+              <button class="mood-btn" data-mood="irritated">Irritated / Lowball</button>
+              <button class="mood-btn active" data-mood="furious">Furious / Insulted</button>
+            </div>
+          </div>
+
+          <!-- ALL MODIFIERS -->
+          <div class="modifiers-grid">
+            <div class="mod-item">
+              <label>Speed <span id="speedVal">1.05x</span></label>
+              <input type="range" id="speed" min="0.6" max="1.6" step="0.05" value="1.05" />
+            </div>
+            <div class="mod-item">
+              <label>Pitch Shift <span id="pitchVal">0.0 st</span></label>
+              <input type="range" id="pitch" min="-4.0" max="4.0" step="0.5" value="0.0" />
+            </div>
+            <div class="mod-item">
+              <label>Temperature <span id="tempVal">0.65</span></label>
+              <input type="range" id="temperature" min="0.2" max="1.1" step="0.05" value="0.65" />
+            </div>
+            <div class="mod-item">
+              <label>Repetition Penalty <span id="repVal">1.30</span></label>
+              <input type="range" id="repPenalty" min="1.0" max="1.8" step="0.05" value="1.30" />
+            </div>
+            <div class="mod-item">
+              <label>Stream Chunk Min <span id="chunkVal">65 ch</span></label>
+              <input type="range" id="chunkSize" min="35" max="180" step="5" value="65" />
+            </div>
+            <div class="mod-item">
+              <label>Engine Voice ID <span id="engineVoiceBadge">chatterbox</span></label>
+              <input type="text" id="voiceOverride" value="f09_tessa_blacksmith" />
+            </div>
+            <div class="mod-item" style="grid-column: 1 / -1;">
+              <label>Unified Acting Direction <span>Qwen native · Chatterbox tags · Kokoro pacing</span></label>
+              <input type="text" id="instructPrompt" value="Speak in a furious, loud, insulted blacksmith voice" />
+            </div>
+          </div>
+
+          <!-- DIALOGUE SCRIPT EDITOR -->
+          <div style="margin-top: 16px;">
+            <div class="section-title">
+              <span>4. NPC Dialogue Script</span>
+              <span id="selectedNpcLabel" style="color: var(--accent);">Selected: Tessa (Blacksmith)</span>
+            </div>
+
+            <div class="editor-wrap">
+              <textarea id="scriptText">Five gold? Five?! Do I look like a charity worker to you, traveler? [groan] This breastplate took three weeks of hammering over dragon-coal! Take your insulting little pouch of coppers and get out of my stall before I lose my temper!</textarea>
+            </div>
+
+            <div class="editor-meta">
+              <div class="meta-pills">
+                <span class="pill" id="charCount">245 chars</span>
+                <span class="pill" id="wordCount">43 words</span>
+                <span class="pill" id="estSpeech">~14.2s spoken</span>
+                <span class="pill" id="chunkEstimate">~3 stream chunks</span>
+              </div>
+              <button class="btn-sm" id="sampleLineBtn">Load Sample Haggle Line</button>
+            </div>
+
+            <div class="tag-row">
+              <span>Chatterbox Tags:</span>
+              <button type="button" class="tag-btn" data-tag="[laugh]">+ [laugh]</button>
+              <button type="button" class="tag-btn" data-tag="[chuckle]">+ [chuckle]</button>
+              <button type="button" class="tag-btn" data-tag="[sigh]">+ [sigh]</button>
+              <button type="button" class="tag-btn" data-tag="[gasp]">+ [gasp]</button>
+              <button type="button" class="tag-btn" data-tag="[groan]">+ [groan]</button>
+            </div>
+
+            <div class="action-row">
+              <button class="btn-generate" id="generateBtn">
+                <span id="genBtnText">Generate &amp; Stream Live</span>
+              </button>
+              <button class="btn-stop" id="stopBtn">Stop</button>
+              <a class="btn-dl" id="downloadBtn" download="npc_dialogue.wav">Download WAV</a>
+            </div>
+            <div class="action-row-sub">
+              <button class="btn-sm" id="shortBtn">Short ~30</button><button class="btn-sm" id="mediumBtn">Medium ~140</button><button class="btn-sm" id="longBtn">Long 300+</button>
+              <label>Runs <input id="batchN" type="number" min="1" max="10" value="3" style="width:48px"></label>
+              <label><input id="cold" type="checkbox"> Reload first</label><button class="btn-sm" id="batchBtn">Run batch</button><button class="btn-sm" id="matrixBtn">Length × chunk matrix</button>
+              <label><input type="checkbox" id="audition" checked> Play audio</label>
+            </div><p id="capNote" style="font-size:.78rem;color:var(--muted)"></p>
+            <div class="action-row-sub">
+              <button class="btn-sm" id="runAllBtn" title="Runs this exact line through Chatterbox, Qwen3 and Kokoro back-to-back and logs all three rows, so you can compare them under identical text/modifiers.">&#9889; Run All 3 Engines (A/B/C)</button>
+              <button class="btn-sm" id="copyPayloadBtn" title="Copies the exact JSON body that will be POSTed to your server, for debugging on the Mac side.">Copy Request JSON</button>
+            </div>
+
+            <!-- LIVE TELEMETRY & ANIMATED WAVEFORM -->
+            <div class="telemetry-box">
+              <div class="vis-header">
+                <span class="status-text" id="statusText">Ready to benchmark.</span>
+                <div class="equalizer" id="equalizer">
+                  <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+                  <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+                  <div class="eq-bar"></div>
+                </div>
+              </div>
+
+              <div class="metrics-grid">
+                <div class="metric-card">
+                  <div class="metric-val" id="mTtfa">--</div>
+                  <div class="metric-lbl">First Audio (TTFA)</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-val" id="mTotal">--</div>
+                  <div class="metric-lbl">Total Gen Time</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-val" id="mAudioDur">--</div>
+                  <div class="metric-lbl">Audio Length</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-val" id="mRtf">--</div>
+                  <div class="metric-lbl">RTF (gen / audio)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BENCHMARK HISTORY COMPARISON -->
+        <div class="card">
+          <div class="section-title">
+            <span>Model Speed Comparison Log</span>
+            <span style="display:flex; gap:8px;">
+              <button class="btn-sm" id="reportBtn">Copy AI Tuning Report</button><button class="btn-sm" id="exportCsvBtn">Export CSV</button>
+              <button class="btn-sm" id="clearLogBtn">Clear History</button>
+            </span>
+          </div>
+
+          <div class="engine-summary" id="engineSummary"></div><p id="batchSummary" style="color:var(--muted)"></p><details><summary>Latest server chunk timings / delivery details</summary><pre id="chunkDetails" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details><div id="clips" class="action-row-sub"></div>
+
+          <div class="bench-table-wrap">
+            <table>
+              <thead>
+                <tr id="benchHeadRow">
+                  <th data-sort="engine">Engine</th>
+                  <th data-sort="mode">Mode</th>
+                  <th data-sort="npcName">NPC Profile</th>
+                  <th data-sort="chars">Chars</th>
+                  <th data-sort="ttfa">TTFA</th>
+                  <th data-sort="total">Total Time</th>
+                  <th data-sort="audioDur">Audio Dur</th>
+                  <th data-sort="rtf">RTF (gen / audio)</th>
+                </tr>
+              </thead>
+              <tbody id="benchBody">
+                <tr>
+                  <td colspan="8" style="color: var(--muted); text-align: center;">Run a generation above to compare model speeds side-by-side.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    // Build default Mac IP dynamically so copy-paste never truncates it
+    const macIP = ["10", "0", "0", "129"].join(".");
+    const serverUrlInput = document.getElementById("serverUrl");
+    serverUrlInput.value = `http://${macIP}:8000`;
+
+    // --- Local persistence (settings + benchmark log survive a page reload) ---
+    // Everything here is plain localStorage read/write, done once per change —
+    // it never touches the network path, so it has no effect on TTS response times.
+    const LS_SETTINGS = "npcTtsStudio.settings.v3";
+    const LS_LOG = "npcTtsStudio.benchmarkLog.v3";
+
+    function loadJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+    }
+    function saveSettings() {
+      try {
+        localStorage.setItem(LS_SETTINGS, JSON.stringify({
+          serverUrl: serverUrlInput.value, mood: currentMood, models: Object.fromEntries(["qwen","chatterbox","kokoro"].map(e=>[e,document.getElementById("model-"+e).value])), interval: document.getElementById("interval").value, script: scriptEl.value,
+          engine: currentEngine,
+          mode: currentMode,
+          npcId: selectedNpc ? selectedNpc.id : null,
+          speed: speedEl.value, pitch: pitchEl.value, temperature: tempEl.value,
+          repPenalty: repEl.value, chunkSize: chunkEl.value,
+          voiceOverride: voiceOverrideEl.value, instruct: instructEl.value
+        }));
+      } catch {}
+    }
+
+    // 30 NPC Roster: 21 Female (70%) + 9 Male (30%) including Japanese Anime Archetypes
+    const NPCS = [
+      // 21 Female (70%)
+      { id: "f01_sakura_genki", name: "Sakura (Genki Shopgirl)", gender: "female", anime: true, desc: "High-energy anime idol merchant, bubbly & eager", kokoro: "af_sky", qwen: "Ono_Anna", pitch: 1.5, speed: 1.08, instruct: "High-pitched, cheerful, energetic Japanese anime girl voice", sample: "Welcome to my shop, traveler! Take a look at all the shiny treasures I found today!" },
+      { id: "f02_reina_tsundere", name: "Reina (Tsundere Trader)", gender: "female", anime: true, desc: "Sharp, proud anime tsundere; flustered when haggling", kokoro: "af_bella", qwen: "Ono_Anna", pitch: 1.0, speed: 1.1, instruct: "Sharp, proud, slightly irritated anime tsundere voice", sample: "Hmph! Five gold?! Don't get the wrong idea, I'm only lowering the price because I have extra stock!" },
+      { id: "f03_yuki_kuudere", name: "Yuki (Kuudere Alchemist)", gender: "female", anime: true, desc: "Calm, deadpan, soft-spoken anime girl", kokoro: "af_nicole", qwen: "Sohee", pitch: 0.5, speed: 0.95, instruct: "Calm, quiet, emotionless, soft-spoken anime girl voice", sample: "The potions are on the left shelf. State your price clearly and do not waste my time." },
+      { id: "f04_himari_onesan", name: "Himari (Onee-san Broker)", gender: "female", anime: true, desc: "Warm, teasing, mature big-sister anime tone", kokoro: "af_heart", qwen: "Vivian", pitch: -0.5, speed: 0.96, instruct: "Warm, teasing, mature big-sister anime voice", sample: "[chuckle] Ara ara, looking for rare gear already? Let's see what kind of coin you brought me." },
+      { id: "f05_akari_idol", name: "Akari (Festival Vendor)", gender: "female", anime: true, desc: "Bubbly, melodic, super enthusiastic anime merchant", kokoro: "af_nova", qwen: "Sohee", pitch: 2.0, speed: 1.12, instruct: "Bubbly, melodic, super enthusiastic anime merchant voice", sample: "Yay! A new customer! Step right up and check out today's special deals!" },
+      { id: "f06_mira_innkeeper", name: "Mira (Tavern Innkeeper)", gender: "female", anime: false, desc: "Warm, welcoming, friendly hearthside host", kokoro: "af_heart", qwen: "Serena", pitch: 0.0, speed: 1.0, instruct: "Warm, welcoming, friendly tavern keeper voice", sample: "Come in out of the cold! Pull up a chair by the fire and tell me what you need." },
+      { id: "f07_lyra_alchemist", name: "Lyra (Eccentric Brewer)", gender: "female", anime: false, desc: "Curious, fast-talking potion brewer", kokoro: "af_bella", qwen: "Vivian", pitch: 0.5, speed: 1.12, instruct: "Curious, slightly eccentric, fast-talking potion brewer voice", sample: "[gasp] Careful with that blue vial! One drop of dragon-root and the whole counter goes boom!" },
+      { id: "f08_elena_noble", name: "Lady Elena (Art Dealer)", gender: "female", anime: false, desc: "Refined, aristocratic, poised noblewoman", kokoro: "bf_emma", qwen: "Serena", pitch: 0.0, speed: 0.95, instruct: "Refined, aristocratic, poised noblewoman voice", sample: "Quality like this is rarely seen outside the capital. Surely you appreciate fine craftsmanship." },
+      { id: "f09_tessa_blacksmith", name: "Tessa (Master Blacksmith)", gender: "female", anime: false, desc: "Tough, raspy, no-nonsense female armorer", kokoro: "af_sarah", qwen: "Vivian", pitch: -1.5, speed: 1.05, instruct: "Tough, raspy, loud, insulted female blacksmith voice", sample: "Five gold? Five?! Do I look like a charity worker to you, traveler? [groan] This breastplate took three weeks of hammering over dragon-coal! Take your insulting little pouch of coppers and get out of my stall before I lose my temper!" },
+      { id: "f10_nadia_smuggler", name: "Nadia (Shadow Smuggler)", gender: "female", anime: false, desc: "Low, secretive, sly street-smart fence", kokoro: "af_nicole", qwen: "Serena", pitch: -1.0, speed: 1.0, instruct: "Low, secretive, sly street-smart smuggler voice", sample: "Keep your voice down. If the town guard catches wind of these goods, we're both finished." },
+      { id: "f11_clara_herbalist", name: "Clara (Village Herbalist)", gender: "female", anime: false, desc: "Gentle, soothing, soft-spoken healer", kokoro: "bf_isabella", qwen: "Sohee", pitch: 0.5, speed: 0.94, instruct: "Gentle, soothing, soft-spoken healer voice", sample: "These mountain herbs were gathered at dawn. They will mend your wounds in no time." },
+      { id: "f12_roxanne_pirate", name: "Capt. Roxanne (Corsair)", gender: "female", anime: false, desc: "Bold, boisterous, confident sea-captain trader", kokoro: "af_bella", qwen: "Vivian", pitch: -1.0, speed: 1.08, instruct: "Bold, boisterous, confident sea-captain voice", sample: "[laugh] Ha! You call that an offer? Even a landlubber knows ruby silk fetches twice that!" },
+      { id: "f13_sylvia_librarian", name: "Sylvia (Arcane Archivist)", gender: "female", anime: false, desc: "Precise, scholarly, slightly strict scroll keeper", kokoro: "bf_emma", qwen: "Serena", pitch: 0.0, speed: 0.98, instruct: "Precise, scholarly, slightly strict archivist voice", sample: "Ancient scrolls require delicate handling—and an equally respectable sum of gold." },
+      { id: "f14_freya_huntress", name: "Freya (Tundra Ranger)", gender: "female", anime: false, desc: "Crisp, direct, practical wilderness trapper", kokoro: "af_sarah", qwen: "Vivian", pitch: -0.5, speed: 1.02, instruct: "Crisp, direct, practical wilderness ranger voice", sample: "Good pelts are hard to come by this winter. Take them or leave them." },
+      { id: "f15_camille_jeweler", name: "Camille (Gem Merchant)", gender: "female", anime: false, desc: "Smooth, persuasive luxury jeweler", kokoro: "bf_isabella", qwen: "Serena", pitch: 0.0, speed: 0.98, instruct: "Smooth, persuasive, luxury merchant voice", sample: "Notice how the light catches the emerald? A piece like this practically sells itself." },
+      { id: "f16_zara_nomad", name: "Zara (Caravan Trader)", gender: "female", anime: false, desc: "Energetic, fast-paced desert spice merchant", kokoro: "af_nova", qwen: "Vivian", pitch: 0.5, speed: 1.12, instruct: "Energetic, fast-paced desert caravan trader voice", sample: "From across the southern dunes to your hands! You won't find spices fresher than these!" },
+      { id: "f17_hazel_baker", name: "Hazel (Village Baker)", gender: "female", anime: false, desc: "Cheerful, cozy, motherly bakery owner", kokoro: "af_heart", qwen: "Sohee", pitch: 0.0, speed: 0.98, instruct: "Cheerful, cozy, motherly village baker voice", sample: "Fresh loaves right out of the oven! Grab a warm sweetroll before they're all gone!" },
+      { id: "f18_valeria_knight", name: "Valeria (Royal Armorer)", gender: "female", anime: false, desc: "Commanding, disciplined, formal quartermaster", kokoro: "bf_emma", qwen: "Serena", pitch: -1.0, speed: 1.0, instruct: "Commanding, disciplined, formal armorer voice", sample: "A soldier's life depends on reliable steel. Do not skimp on your armor, traveler." },
+      { id: "f19_luna_astrologer", name: "Luna (Mystic Fortune Teller)", gender: "female", anime: false, desc: "Dreamy, mysterious, whimsical tent mystic", kokoro: "af_nicole", qwen: "Sohee", pitch: 0.5, speed: 0.92, instruct: "Dreamy, mysterious, whimsical fortune teller voice", sample: "[sigh] The stars whispered you would visit my tent tonight, seeking something rare." },
+      { id: "f20_maeve_witch", name: "Maeve (Swamp Apothecary)", gender: "female", anime: false, desc: "Raspy, cackling, mischievous potion witch", kokoro: "af_sarah", qwen: "Vivian", pitch: -1.5, speed: 1.04, instruct: "Raspy, cackling, mischievous swamp apothecary voice", sample: "[chuckle] Hehehe, a pinch of nightshade and a silver coin—that's the price of my brew!" },
+      { id: "f21_chloe_squire", name: "Chloe (Apprentice Clerk)", gender: "female", anime: true, desc: "Young, eager, slightly nervous anime shop clerk", kokoro: "af_sky", qwen: "Ono_Anna", pitch: 1.5, speed: 1.06, instruct: "Young, eager, slightly nervous apprentice merchant voice", sample: "[gasp] Um, welcome! Master stepped out for a moment, so I'm handling the counter today!" },
+
+      // 9 Male (30%)
+      { id: "m01_kenji_shonen", name: "Kenji (Shonen Gearsmith)", gender: "male", anime: true, desc: "Energetic, passionate young anime protagonist tone", kokoro: "am_puck", qwen: "Aiden", pitch: 1.0, speed: 1.1, instruct: "Energetic, passionate, determined young anime hero voice", sample: "Alright! If you're ready to strike a fair deal, I won't back down either!" },
+      { id: "m02_ren_cool_anime", name: "Ren (Stoic Anime Blade)", gender: "male", anime: true, desc: "Deep, calm, aloof anime swordsman merchant", kokoro: "am_fenrir", qwen: "Dylan", pitch: -1.0, speed: 0.95, instruct: "Deep, calm, stoic, cool anime swordsman voice", sample: "Hmph. State your offer. I have no patience for idle chatter." },
+      { id: "m03_garrick_dwarf", name: "Garrick (Dwarven Forger)", gender: "male", anime: false, desc: "Gruff, deep, booming veteran blacksmith", kokoro: "am_fenrir", qwen: "Uncle_Fu", pitch: -2.0, speed: 1.02, instruct: "Gruff, deep, booming veteran blacksmith voice", sample: "Bah! That steel was tempered in mountain fire! Add ten more gold or get out!" },
+      { id: "m04_marcus_merchant", name: "Marcus (General Trader)", gender: "male", anime: false, desc: "Friendly, smooth, persuasive store owner", kokoro: "am_michael", qwen: "Ryan", pitch: 0.0, speed: 1.0, instruct: "Friendly, smooth, persuasive general store owner voice", sample: "Welcome, my friend! Always a pleasure doing business with a discerning traveler." },
+      { id: "m05_aldric_noble", name: "Lord Aldric (Antiquarian)", gender: "male", anime: false, desc: "Haughty, pompous aristocratic collector", kokoro: "bm_lewis", qwen: "Eric", pitch: 0.5, speed: 0.96, instruct: "Haughty, pompous, wealthy aristocratic collector voice", sample: "Do you have any idea how rare this relic is? Truly, commoners have no eye for art." },
+      { id: "m06_finn_rogue", name: "Finn (Back-Alley Fence)", gender: "male", anime: false, desc: "Quick, cheeky, playful street-urchin broker", kokoro: "am_puck", qwen: "Aiden", pitch: 1.0, speed: 1.14, instruct: "Quick, cheeky, playful street-urchin fence voice", sample: "[chuckle] You didn't hear it from me, pal, but this key opens more than just rusty chests." },
+      { id: "m07_boris_butcher", name: "Boris (Hearty Butcher)", gender: "male", anime: false, desc: "Loud, hearty, jovial tavern provisioner", kokoro: "bm_george", qwen: "Uncle_Fu", pitch: -1.5, speed: 1.02, instruct: "Loud, hearty, jovial heavy-set tavern butcher voice", sample: "[laugh] Ha! Good appetite brings good business! Finest cuts in the whole kingdom right here!" },
+      { id: "m08_orin_wizard", name: "Orin (Eccentric Wizard)", gender: "male", anime: false, desc: "Elderly, raspy, whimsical arcane shopkeeper", kokoro: "bm_george", qwen: "Eric", pitch: 1.0, speed: 1.04, instruct: "Elderly, raspy, eccentric arcane shopkeeper voice", sample: "Mind the floating crystal! Touch it without paying and it might turn your boots to frogs!" },
+      { id: "m09_thane_guard", name: "Thane (Town Quartermaster)", gender: "male", anime: false, desc: "Stern, authoritative, serious garrison supplier", kokoro: "am_adam", qwen: "Ryan", pitch: -1.0, speed: 0.98, instruct: "Stern, authoritative, serious town quartermaster voice", sample: "Keep your hands where I can see them and keep the haggling civil, traveler." }
+    ];
+
+    const MOODS = {
+      neutral: { speed: 1.0, pitch: 0.0, temp: 0.65, instruct: "Speak in a natural, conversational merchant tone" },
+      happy: { speed: 1.06, pitch: 0.5, temp: 0.72, instruct: "Speak warmly, cheerfully, and enthusiastically like a pleased merchant" },
+      suspicious: { speed: 0.94, pitch: -0.5, temp: 0.55, instruct: "Speak slowly, cautiously, and skeptically with lowered voice" },
+      irritated: { speed: 1.08, pitch: 0.0, temp: 0.70, instruct: "Speak sharply, impatiently, and annoyed at a lowball offer" },
+      furious: { speed: 1.12, pitch: -0.5, temp: 0.75, instruct: "Speak in a furious, loud, insulted, angry merchant voice" }
+    };
+
+    let currentMode = "stream";
+    let currentMood = "neutral";
+    let currentEngine = "chatterbox";
+    let selectedNpc = NPCS[8]; // Default to Tessa (Blacksmith)
+    let currentFilter = "all";
+    let activeCtx = null;
+    let abortCtrl = null;
+    let currentBlobUrl = null;
+    let benchmarkLog = loadJSON(LS_LOG) || []; // newest first
+    let sortKey = null;
+    let sortAsc = false;
+
+    // UI Element Refs
+    const npcListEl = document.getElementById("npcList");
+    const speedEl = document.getElementById("speed");
+    const pitchEl = document.getElementById("pitch");
+    const tempEl = document.getElementById("temperature");
+    const repEl = document.getElementById("repPenalty");
+    const chunkEl = document.getElementById("chunkSize");
+    const voiceOverrideEl = document.getElementById("voiceOverride");
+    const instructEl = document.getElementById("instructPrompt");
+    const scriptEl = document.getElementById("scriptText");
+
+    // Server Health Ping
+    async function checkServer() {
+      const dot = document.getElementById("statusDot");
+      const statusText = document.getElementById("statusText");
+      const url = serverUrlInput.value.trim().replace(/\/$/, "");
+      try {
+        const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(2500) });
+        if (res.ok) {
+          const data = await res.json();
+          dot.className = "status-dot online";
+          if(data.api_version!=="3.0") throw new Error("Backend upgrade required");
+          statusText.textContent = `Connected! Active model in RAM: ${(data.active_engine || "none").toUpperCase()} (${(data.chatterbox_voices || []).length} seed WAVs)`;
+        } else {
+          throw new Error("Bad response");
+        }
+      } catch {
+        dot.className = "status-dot offline";
+        statusText.textContent = "Server unavailable or V3 backend required. Start game_tts_server.py on your Mac.";
+      }
+    }
+    document.getElementById("pingBtn").onclick = checkServer;
+
+    // Render NPC Roster
+    function renderNpcs() {
+      const q = document.getElementById("npcSearch").value.toLowerCase();
+      const filtered = NPCS.filter(n => {
+        if (currentFilter === "female" && n.gender !== "female") return false;
+        if (currentFilter === "male" && n.gender !== "male") return false;
+        if (currentFilter === "anime" && !n.anime) return false;
+        return n.name.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q);
+      });
+
+      document.getElementById("rosterCount").textContent = `${filtered.length} Shown`;
+      npcListEl.innerHTML = filtered.map(n => `
+        <div class="npc-item ${n.id === selectedNpc.id ? "selected" : ""}" data-id="${n.id}" data-gender="${n.gender}">
+          <div class="npc-name">${n.name}</div>
+          <div class="npc-desc">${n.desc}</div>
+          <div class="npc-tags">
+            ${n.anime ? '<span class="badge anime">Anime</span>' : ''}
+            <span class="badge ${n.gender === 'female' ? 'fem' : 'male'}">${n.gender === 'female' ? 'Female' : 'Male'}</span>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".npc-item").forEach(el => {
+        el.onclick = () => {
+          selectedNpc = NPCS.find(x => x.id === el.dataset.id);
+          applyNpcToControls();
+          applyMood(currentMood);
+          renderNpcs();
+          saveSettings();
+        };
+      });
+    }
+
+    function applyNpcToControls() {
+      document.getElementById("selectedNpcLabel").textContent = `Selected: ${selectedNpc.name}`;
+      pitchEl.value = selectedNpc.pitch;
+      speedEl.value = selectedNpc.speed;
+      instructEl.value = selectedNpc.instruct;
+      updateVoiceIdForEngine();
+      updateSliderLabels();
+    }
+
+    function updateVoiceIdForEngine() {
+      document.getElementById("engineVoiceBadge").textContent = currentEngine;
+      document.getElementById("capNote").textContent = currentEngine==="qwen" ? "Native stream uses interval; text chunk minimum only applies to non-native streaming. Speed uses legacy resampling (also changes pitch)." : currentEngine==="kokoro" ? "Temperature, repetition penalty and instruct are not native controls. Mood uses speed, pitch and punctuation. Chunk minimum applies to text grouping." : "Mood → reaction tags; explicit tags win. Temperature and repetition penalty are passed to the model. Text chunks, not native Qwen streaming.";
+      if (currentEngine === "chatterbox") voiceOverrideEl.value = selectedNpc.id;
+      else if (currentEngine === "qwen") voiceOverrideEl.value = selectedNpc.qwen;
+      else voiceOverrideEl.value = selectedNpc.kokoro;
+    }
+
+    function updateSliderLabels() {
+      document.getElementById("speedVal").textContent = `${Number(speedEl.value).toFixed(2)}x`;
+      const p = Number(pitchEl.value);
+      document.getElementById("pitchVal").textContent = `${p > 0 ? "+" : ""}${p.toFixed(1)} st`;
+      document.getElementById("tempVal").textContent = Number(tempEl.value).toFixed(2);
+      document.getElementById("repVal").textContent = Number(repEl.value).toFixed(2);
+      document.getElementById("chunkVal").textContent = `${chunkEl.value} ch`;
+    }
+
+    [speedEl, pitchEl, tempEl, repEl, chunkEl].forEach(el => el.addEventListener("input", updateSliderLabels));
+
+    // Filter Tabs & Search
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentFilter = btn.dataset.filter;
+        renderNpcs();
+      };
+    });
+    document.getElementById("npcSearch").addEventListener("input", renderNpcs);
+
+    // Mode Toggle (Stream vs Full)
+    document.querySelectorAll(".seg-btn").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode = btn.dataset.mode;
+        document.getElementById("genBtnText").textContent =
+          currentMode === "stream" ? "Generate & Stream Live" : "Generate Full WAV File";
+        saveSettings();
+      };
+    });
+
+    // Engine Toggle
+    document.querySelectorAll(".eng-card").forEach(card => {
+      card.onclick = () => {
+        document.querySelectorAll(".eng-card").forEach(c => c.classList.remove("active"));
+        card.classList.add("active");
+        currentEngine = card.dataset.engine;
+        updateVoiceIdForEngine();
+        saveSettings();
+      };
+    });
+
+    // Mood Presets
+    document.querySelectorAll(".mood-btn").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".mood-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        applyMood(btn.dataset.mood);
+        saveSettings();
+      };
+    });
+
+    function applyMood(mood) {
+      currentMood=mood; const m=MOODS[mood];
+      speedEl.value=Math.min(1.6,Math.max(.6,selectedNpc.speed*m.speed));
+      pitchEl.value=Math.min(4,Math.max(-4,selectedNpc.pitch+m.pitch));
+      tempEl.value=m.temp; instructEl.value=selectedNpc.instruct+". "+m.instruct;
+      document.querySelectorAll(".mood-btn").forEach(b=>b.classList.toggle("active",b.dataset.mood===mood)); updateSliderLabels();
+    }
+    // Script Metadata & Sample Loader
+    function updateScriptMeta() {
+      const txt = scriptEl.value.trim();
+      const chars = txt.length;
+      const words = txt ? txt.split(/\s+/).length : 0;
+      const estSec = (chars / 17.2).toFixed(1);
+      const chunks = Math.max(1, Math.ceil(chars / Number(chunkEl.value)));
+      document.getElementById("charCount").textContent = `${chars} chars`;
+      document.getElementById("wordCount").textContent = `${words} words`;
+      document.getElementById("estSpeech").textContent = `~${estSec}s spoken`;
+      document.getElementById("chunkEstimate").textContent = `Text grouping target ${chunkEl.value} chars`;
+    }
+    scriptEl.addEventListener("input", updateScriptMeta);
+    chunkEl.addEventListener("input", updateScriptMeta);
+    document.getElementById("sampleLineBtn").onclick = () => {
+      scriptEl.value = selectedNpc.sample;
+      updateScriptMeta();
+    };
+
+    // Tag Insertion
+    document.querySelectorAll(".tag-btn").forEach(btn => {
+      btn.onclick = () => {
+        const tag = btn.dataset.tag;
+        const s = scriptEl.selectionStart;
+        const e = scriptEl.selectionEnd;
+        scriptEl.value = scriptEl.value.slice(0, s) + ` ${tag} ` + scriptEl.value.slice(e);
+        scriptEl.focus();
+        updateScriptMeta();
+      };
+    });
+
+    const $=id=>document.getElementById(id), engines=["qwen","chatterbox","kokoro"];
+    let busy=false, cancelled=false, clips=[], serverInfo=null;
+    const status=t=>$('statusText').textContent=t;
+    const fmt=n=>Number.isFinite(n)?n.toFixed(3):'—';
+    const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const base=()=>serverUrlInput.value.trim().replace(/\/+$/,'');
+    const archetype=n=>n.gender==='male'?(n.anime&&n.id==='m01_kenji_shonen'?'male_young':'male_deep'):n.anime?(n.id==='f02_reina_tsundere'?'female_anime_sharp':'female_anime_bright'):['f09','f12','f20'].includes(n.id.slice(0,3))?'female_mature':'female_warm';
+    function payload(engine=currentEngine){return {engine,model_id:$('model-'+engine).value.trim(),input:scriptEl.value.trim(),voice:engine===currentEngine?voiceOverrideEl.value.trim():engine==='chatterbox'?selectedNpc.id:selectedNpc[engine],archetype:archetype(selectedNpc),mood:currentMood,instruct:instructEl.value.trim(),speed:+speedEl.value,pitch_shift:+pitchEl.value,temperature:+tempEl.value,repetition_penalty:+repEl.value,stream_chunk_min:+chunkEl.value,streaming_interval:+$('interval').value};}
+    function stopPlayback(){cancelled=true;abortCtrl?.abort(); if(activeCtx){activeCtx.close().catch(()=>{});activeCtx=null;} $('equalizer').classList.remove('active');status('Stopped. Server may finish its current inference before accepting another request.');}
+    $('stopBtn').onclick=stopPlayback;
+    function wav(parts,rate){let len=parts.reduce((n,p)=>n+p.length,0);let h=new ArrayBuffer(44),v=new DataView(h); const str=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));str(0,'RIFF');v.setUint32(4,36+len,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,len,true);return new Blob([h,...parts],{type:'audio/wav'});}
+    function addClip(blob,p){const url=URL.createObjectURL(blob);clips.push(url);const wrap=document.createElement('div');wrap.style.cssText='border:1px solid var(--border);padding:7px;border-radius:8px';const label=document.createElement('div');label.textContent=p.engine+' · '+p.voice;const a=document.createElement('audio');a.controls=true;a.src=url;a.style.width='200px';wrap.append(label,a);$('clips').append(wrap);if(clips.length>9){URL.revokeObjectURL(clips.shift());$('clips').firstElementChild.remove();} $('downloadBtn').href=url;$('downloadBtn').download=p.voice+'_'+p.engine+'.wav';$('downloadBtn').classList.add('visible');}
+    async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw Error('HTTP '+r.status+' '+(await r.text()).slice(0,450));return r.json();}
+    async function run(p,mode,url,play){
+      if(cancelled)return; if(!p.input)throw Error('Enter dialogue first');
+      abortCtrl=new AbortController();const signal=abortCtrl.signal;
+      const t0=performance.now();let ttfa=null, samples=0, parts=[], next=activeCtx?.currentTime||0, arrivals=[];
+      status(`Generating ${p.engine} · ${p.voice}`);$('equalizer').classList.add('active');
+      const res=await fetch(url+(mode==='stream'?'/stream':'/v1/audio/speech'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p),signal});
+      if(!res.ok)throw Error('HTTP '+res.status+' '+(await res.text()).slice(0,450));
+      const id=res.headers.get('X-Run-Id');if(!id)throw Error('V3 backend required: no X-Run-Id');
+      const rate=Number(res.headers.get('X-Sample-Rate'));if(!rate)throw Error('Missing sample rate');
+      let blob;
+      if(mode==='stream'){
+        const reader=res.body.getReader();let leftover=new Uint8Array(0);
+        try {while(true){const {done,value}=await reader.read();if(done)break;
+          const combined=new Uint8Array(leftover.length+value.length);combined.set(leftover);combined.set(value,leftover.length);const usable=combined.length-combined.length%2;leftover=combined.slice(usable);if(!usable)continue;
+          const now=(performance.now()-t0)/1000;if(ttfa===null){ttfa=now;$('mTtfa').textContent=fmt(ttfa)+'s';}arrivals.push(now);status(`Streaming ${p.engine} · network read ${arrivals.length} · ${fmt(now)}s (server chunk timings after completion)`);
+          const bytes=combined.slice(0,usable);parts.push(bytes);const n=usable/2;samples+=n;
+          // V2 PCM AudioContext decoder: little-endian signed 16-bit, carry split samples.
+          if(play&&activeCtx){const view=new DataView(bytes.buffer),f=new Float32Array(n);for(let i=0;i<n;i++)f[i]=view.getInt16(i*2,true)/32768;const buffer=activeCtx.createBuffer(1,n,rate);buffer.getChannelData(0).set(f);const source=activeCtx.createBufferSource();source.buffer=buffer;source.connect(activeCtx.destination);next=Math.max(next,activeCtx.currentTime);source.start(next);next+=buffer.duration;}
+        }}finally{reader.releaseLock();}
+        if(leftover.length||!samples)throw Error('Incomplete or empty PCM response');blob=wav(parts,rate);
+      }else{blob=await res.blob();ttfa=(performance.now()-t0)/1000;}
+      const clientTotal=(performance.now()-t0)/1000;
+      const m=await json(url+'/runs/'+id,{signal});if(m.status!=='complete')throw Error('Incomplete server run: '+m.status);
+      const dur=m.audio_duration_s, total=m.total_s, rtf=dur>0?total/dur:null;
+      const row={...p,ts:Date.now(),npcName:selectedNpc.name,mode,model_id:m.model_id,model_state:m.model_state,load_s:m.load_s,ttfa:m.ttfa_s,total,audioDur:dur,rtf,client_ttfa:ttfa,client_total:clientTotal,chars:p.input.length,chunks:m.chunks,network_arrivals_s:arrivals,effective_text:m.effective_text,resolved_instruct:m.resolved_instruct,ignored_controls:m.ignored_controls,native_stream:m.native_stream};
+      benchmarkLog.unshift(row);benchmarkLog=benchmarkLog.slice(0,300);try{localStorage.setItem(LS_LOG,JSON.stringify(benchmarkLog));}catch{status('History storage full; export CSV.');}
+      $('mTtfa').textContent=fmt(m.ttfa_s)+'s';$('mTotal').textContent=fmt(total)+'s';$('mAudioDur').textContent=fmt(dur)+'s';$('mRtf').textContent=fmt(rtf);
+      $('chunkDetails').textContent=JSON.stringify({...m,network_arrivals_s:arrivals},null,2);renderEngineSummary();renderBenchmarkTable();addClip(blob,p);
+      status(`${p.engine} · ${m.model_state} · load ${fmt(m.load_s)}s · server TTFA ${fmt(m.ttfa_s)}s · client ${fmt(ttfa)}s`);
+      if(play&&mode==='full'&&activeCtx){const buf=await activeCtx.decodeAudioData(await blob.arrayBuffer());if(cancelled||!activeCtx)return row;const source=activeCtx.createBufferSource();source.buffer=buf;source.connect(activeCtx.destination);source.start();next=activeCtx.currentTime+buf.duration;}
+      // Allow each audition to finish before the next one; exclude playback from telemetry.
+      while(play&&activeCtx&&!cancelled&&activeCtx.currentTime<next)await new Promise(r=>setTimeout(r,50));return row;
+    }
+    async function suite(plan){if(busy)return;busy=true;cancelled=false;const controls=[...document.querySelectorAll('button,input,textarea,select')].filter(x=>x.id!=='stopBtn');controls.forEach(x=>x.disabled=true);document.querySelectorAll('.npc-item').forEach(x=>x.style.pointerEvents='none');let rows=[], failures=[];
+      try{if(activeCtx)await activeCtx.close();activeCtx=null;const play=$('audition').checked;if(play){activeCtx=new (window.AudioContext||window.webkitAudioContext)();await activeCtx.resume();}const url=base(), mode=currentMode;for(let i=0;i<plan.length&&!cancelled;i++){status(`Run ${i+1}/${plan.length}`);try{const r=await run(plan[i],mode,url,play);if(r)rows.push(r);}catch(e){if(cancelled)break;failures.push(plan[i].engine+': '+e.message);status('Run failed: '+e.message);if(plan.length===1)throw e;}}}
+      catch(e){if(!cancelled)status('Error: '+e.message);}finally{busy=false;controls.forEach(x=>x.disabled=false);document.querySelectorAll('.npc-item').forEach(x=>x.style.pointerEvents='');$('equalizer').classList.remove('active');if(activeCtx){await activeCtx.close().catch(()=>{});activeCtx=null;}const warm=rows.filter(r=>r.model_state==='warm');const avg=warm.reduce((s,r)=>s+r.ttfa,0)/warm.length;const sd=Math.sqrt(warm.reduce((s,r)=>s+(r.ttfa-avg)**2,0)/warm.length);$('batchSummary').textContent=`Last suite: ${rows.length}/${plan.length} completed · warm n=${warm.length} · mean TTFA ${fmt(avg)}s · population SD ${fmt(sd)}s${failures.length?` · ${failures.length} failed: ${failures.join("; ")}`:""}`;}}
+    $('generateBtn').onclick=()=>suite([payload()]);$('runAllBtn').onclick=()=>suite(engines.map(e=>payload(e)));
+    $('batchBtn').onclick=()=>{const n=Math.min(10,Math.max(1,Math.floor(+$('batchN').value||3)));suite(Array.from({length:n},(_,i)=>({...payload(),force_reload:i===0&&$('cold').checked})));};
+    const scripts=['Hold there! What is your price?','You offer me five gold for this fine blade? It cost twice that to forge. Make a fair offer, traveler, and perhaps we can strike a deal.','Listen closely, traveler. This sword was forged beneath the mountain where the dragon sleeps, and every inch of its steel was tempered by hand. I carried it through storms, across the frozen pass, and down into the old city. Now you ask me to sell it for a handful of coins? I respect a good bargain, but I will not insult the craft. Bring me a fair offer, and we shall both leave this counter smiling.'];
+    ['shortBtn','mediumBtn','longBtn'].forEach((id,i)=>$(id).onclick=()=>{scriptEl.value=scripts[i];updateScriptMeta();saveSettings();});
+    $('matrixBtn').onclick=()=>suite(scripts.flatMap(input=>[35,85,150].map(stream_chunk_min=>({...payload(),input,stream_chunk_min}))));
+    function summaries(){return engines.map(engine=>{const r=benchmarkLog.filter(x=>x.engine===engine).slice(0,20);const mean=k=>r.length?r.reduce((s,x)=>s+x[k],0)/r.length:null;const w=r.filter(x=>x.model_state==='warm');return {engine,count:r.length,ttfa:mean('ttfa'),total:mean('total'),audioDur:mean('audioDur'),rtf:mean('rtf'),warm_count:w.length,warm_ttfa:w.length?w.reduce((sum,x)=>sum+x.ttfa,0)/w.length:null};});}
+    function renderEngineSummary(){$('engineSummary').innerHTML=summaries().map(r=>`<div class="engine-summary-card"><div class="es-title">${r.engine.toUpperCase()} · ${r.count}/20 runs</div><div class="es-stats" style="display:block">TTFA <b>${fmt(r.ttfa)}s</b> · ${Number.isFinite(r.ttfa)?Math.round(r.ttfa*1000)+' ms':'—'}<br>Total <b>${fmt(r.total)}s</b> · Audio <b>${fmt(r.audioDur)}s</b><br>RTF <b>${fmt(r.rtf)}</b><br>Warm TTFA <b>${fmt(r.warm_ttfa)}s</b> (n=${r.warm_count})</div></div>`).join('');}
+    function renderBenchmarkTable(){let rows=benchmarkLog.slice();if(sortKey)rows.sort((a,b)=>(typeof a[sortKey]==='string'?String(a[sortKey]).localeCompare(String(b[sortKey])):(a[sortKey]??0)-(b[sortKey]??0))*(sortAsc?1:-1));$('benchBody').innerHTML=rows.map(r=>`<tr><td title="${escape(r.model_id)}">${escape(r.engine)}<br>${escape(r.model_state)} · load ${fmt(r.load_s)}s</td><td>${escape(r.mode)}</td><td>${escape(r.npcName)}</td><td>${r.chars}</td><td>${fmt(r.ttfa)}s</td><td>${fmt(r.total)}s</td><td>${fmt(r.audioDur)}s</td><td>${fmt(r.rtf)}</td></tr>`).join('')||'<tr><td colspan="8">No runs yet.</td></tr>';}
+    document.querySelectorAll('#benchHeadRow th').forEach(th=>th.onclick=()=>{sortAsc=sortKey===th.dataset.sort?!sortAsc:true;sortKey=th.dataset.sort;renderBenchmarkTable();});
+    $('clearLogBtn').onclick=()=>{if(confirm('Clear benchmark history?')){benchmarkLog=[];localStorage.removeItem(LS_LOG);renderBenchmarkTable();renderEngineSummary();}};
+    const fields=['ts','engine','model_id','model_state','mode','npcName','voice','mood','input','speed','temperature','repetition_penalty','pitch_shift','stream_chunk_min','streaming_interval','instruct','effective_text','resolved_instruct','ignored_controls','native_stream','load_s','ttfa','total','audioDur','rtf','client_ttfa','client_total','chunks','network_arrivals_s'];
+    const val=(r,k)=>k==='ts'?new Date(r.ts).toISOString():typeof r[k]==='object'?JSON.stringify(r[k]):String(r[k]??'');
+    function download(text,name,type){const u=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+    $('exportCsvBtn').onclick=()=>{const quote=s=>'"'+String(s).replace(/"/g,'""')+'"';download([fields.join(','),...benchmarkLog.map(r=>fields.map(k=>quote(val(r,k))).join(','))].join('\n'),'hermes_benchmarks.csv','text/csv');};
+    async function copy(t){try{await navigator.clipboard.writeText(t);status('Copied.');}catch{const a=document.createElement('textarea');a.value=t;document.body.append(a);a.select();const ok=document.execCommand('copy');a.remove();if(!ok)download(t,'hermes_report.txt','text/plain');status(ok?'Copied.':'Clipboard unavailable; downloaded report.');}}
+    $('copyPayloadBtn').onclick=()=>copy(JSON.stringify(payload(),null,2));
+    $('reportBtn').onclick=()=>{const cell=s=>String(s).replace(/\|/g,'\\|').replace(/\r?\n/g,' ');const table=(keys,rows)=>[keys.join(' | '),keys.map(()=> '---').join(' | '),...rows.map(r=>keys.map(k=>cell(val(r,k))).join(' | '))].join('\n');copy('# Hermes Engine V3 tuning report\nServer inference timings exclude model loading; client TTFA includes request and load. RTF=gen/audio. Warm means resident model, not guaranteed shader warm. Native Qwen ignores text chunk minimum.\n\n'+table(['engine','count','ttfa','total','audioDur','rtf','warm_count','warm_ttfa'],summaries())+'\n\n'+table(fields,benchmarkLog));};
+    $('coverageBtn').onclick=async()=>{try{serverInfo=await json(base()+'/health');const refs=serverInfo.chatterbox_voices||[];const missing=NPCS.filter(n=>!refs.includes(n.id));$('coverage').textContent=`30 mappings · ${NPCS.filter(n=>n.gender==='female').length} female · ${NPCS.filter(n=>n.anime).length} anime\nChatterbox reference files: ${30-missing.length}/30 found\nMissing: ${missing.map(n=>n.id).join(', ')||'none'}\nQwen/Kokoro voice IDs are mapped, not audio-verified.\n`+NPCS.map(n=>`${n.id}: ${n.qwen} / ${n.id} / ${n.kokoro}`).join('\n');}catch(e){$('coverage').textContent=e.message;}};
+    function restoreSettings(){const s=loadJSON(LS_SETTINGS)||loadJSON('npcTtsStudio.settings.v1')||{};if(s.serverUrl)serverUrlInput.value=s.serverUrl; $('drawerUrl').value=serverUrlInput.value;selectedNpc=NPCS.find(n=>n.id===s.npcId)||selectedNpc;currentEngine=engines.includes(s.engine)?s.engine:currentEngine;currentMode=s.mode==='full'?'full':'stream';applyNpcToControls();applyMood(MOODS[s.mood]?s.mood:'neutral');for(const [key,el] of Object.entries({speed:speedEl,pitch:pitchEl,temperature:tempEl,repPenalty:repEl,chunkSize:chunkEl,voiceOverride:voiceOverrideEl,instruct:instructEl,script:scriptEl}))if(s[key]!=null)el.value=s[key];for(const e of engines)if(s.models?.[e])$('model-'+e).value=s.models[e];if(s.interval)$('interval').value=s.interval;document.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===currentMode));document.querySelectorAll('.eng-card').forEach(b=>b.classList.toggle('active',b.dataset.engine===currentEngine));$('genBtnText').textContent=currentMode==='stream'?'Generate & Stream Live':'Generate Full WAV File';updateSliderLabels();}
+    [speedEl,pitchEl,tempEl,repEl,chunkEl,voiceOverrideEl,instructEl,scriptEl,$('interval'),...engines.map(e=>$('model-'+e))].forEach(el=>el.addEventListener('input',saveSettings));serverUrlInput.addEventListener('change',()=>{$('drawerUrl').value=serverUrlInput.value;saveSettings();});$('drawerUrl').addEventListener('change',()=>{serverUrlInput.value=$('drawerUrl').value;saveSettings();});
+    restoreSettings();renderNpcs();updateScriptMeta();renderEngineSummary();renderBenchmarkTable();checkServer();
+
+  </script>
+</body>
+</html>
