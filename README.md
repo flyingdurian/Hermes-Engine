@@ -1,4 +1,12 @@
-# Hermes Engine — V3 handoff
+# Hermes Engine — Multi-Engine MLX NPC Speech API
+
+**Integration:** [HTTP API contract](docs/API.md) · [The Last Emporium / Godot integration](docs/LAST_EMPORIUM_INTEGRATION.md) · [Godot adapter](examples/godot/HermesTTS.gd)
+
+**Status:** V3 release candidate, Mac M2/8GB runtime verification pending. The Last Emporium integration is a proposed first-pass adapter, not deployed to the game. For interactive API docs while the FastAPI server runs, visit `http://10.0.0.129:8000/docs` (or `http://127.0.0.1:8000/docs` on the Mac).
+
+---
+
+## V3 handoff
 
 Owner/creative director: repository owner. Lead developer: ChatGPT. Target: MacBook Air M2, 8GB unified RAM; one local MLX model resident. V3 starts from supplied active server and 30-profile V2 HTML. This is a release candidate, not a Mac-verified production release.
 
