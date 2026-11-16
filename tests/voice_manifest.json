@@ -1,0 +1,152 @@
+[
+  {
+    "id": "f01_sakura_genki",
+    "qwen": "Ono_Anna",
+    "kokoro": "af_sky"
+  },
+  {
+    "id": "f02_reina_tsundere",
+    "qwen": "Ono_Anna",
+    "kokoro": "af_bella"
+  },
+  {
+    "id": "f03_yuki_kuudere",
+    "qwen": "Sohee",
+    "kokoro": "af_nicole"
+  },
+  {
+    "id": "f04_himari_onesan",
+    "qwen": "Vivian",
+    "kokoro": "af_heart"
+  },
+  {
+    "id": "f05_akari_idol",
+    "qwen": "Sohee",
+    "kokoro": "af_nova"
+  },
+  {
+    "id": "f06_mira_innkeeper",
+    "qwen": "Serena",
+    "kokoro": "af_heart"
+  },
+  {
+    "id": "f07_lyra_alchemist",
+    "qwen": "Vivian",
+    "kokoro": "af_bella"
+  },
+  {
+    "id": "f08_elena_noble",
+    "qwen": "Serena",
+    "kokoro": "bf_emma"
+  },
+  {
+    "id": "f09_tessa_blacksmith",
+    "qwen": "Vivian",
+    "kokoro": "af_sarah"
+  },
+  {
+    "id": "f10_nadia_smuggler",
+    "qwen": "Serena",
+    "kokoro": "af_nicole"
+  },
+  {
+    "id": "f11_clara_herbalist",
+    "qwen": "Sohee",
+    "kokoro": "bf_isabella"
+  },
+  {
+    "id": "f12_roxanne_pirate",
+    "qwen": "Vivian",
+    "kokoro": "af_bella"
+  },
+  {
+    "id": "f13_sylvia_librarian",
+    "qwen": "Serena",
+    "kokoro": "bf_emma"
+  },
+  {
+    "id": "f14_freya_huntress",
+    "qwen": "Vivian",
+    "kokoro": "af_sarah"
+  },
+  {
+    "id": "f15_camille_jeweler",
+    "qwen": "Serena",
+    "kokoro": "bf_isabella"
+  },
+  {
+    "id": "f16_zara_nomad",
+    "qwen": "Vivian",
+    "kokoro": "af_nova"
+  },
+  {
+    "id": "f17_hazel_baker",
+    "qwen": "Sohee",
+    "kokoro": "af_heart"
+  },
+  {
+    "id": "f18_valeria_knight",
+    "qwen": "Serena",
+    "kokoro": "bf_emma"
+  },
+  {
+    "id": "f19_luna_astrologer",
+    "qwen": "Sohee",
+    "kokoro": "af_nicole"
+  },
+  {
+    "id": "f20_maeve_witch",
+    "qwen": "Vivian",
+    "kokoro": "af_sarah"
+  },
+  {
+    "id": "f21_chloe_squire",
+    "qwen": "Ono_Anna",
+    "kokoro": "af_sky"
+  },
+  {
+    "id": "m01_kenji_shonen",
+    "qwen": "Aiden",
+    "kokoro": "am_puck"
+  },
+  {
+    "id": "m02_ren_cool_anime",
+    "qwen": "Dylan",
+    "kokoro": "am_fenrir"
+  },
+  {
+    "id": "m03_garrick_dwarf",
+    "qwen": "Uncle_Fu",
+    "kokoro": "am_fenrir"
+  },
+  {
+    "id": "m04_marcus_merchant",
+    "qwen": "Ryan",
+    "kokoro": "am_michael"
+  },
+  {
+    "id": "m05_aldric_noble",
+    "qwen": "Eric",
+    "kokoro": "bm_lewis"
+  },
+  {
+    "id": "m06_finn_rogue",
+    "qwen": "Aiden",
+    "kokoro": "am_puck"
+  },
+  {
+    "id": "m07_boris_butcher",
+    "qwen": "Uncle_Fu",
+    "kokoro": "bm_george"
+  },
+  {
+    "id": "m08_orin_wizard",
+    "qwen": "Eric",
+    "kokoro": "bm_george"
+  },
+  {
+    "id": "m09_thane_guard",
+    "qwen": "Ryan",
+    "kokoro": "am_adam"
+  }
+]
